@@ -100,7 +100,10 @@ def build_dataset(
                     lbl[chosen] = speckle_label
                     organ_to_role[speckle_label] = "stem-speckle"
 
-            color_fn = role_aware_color_callable(organ_to_role)
+            overrides = {}
+            if spec.pedicel_rgb is not None:
+                overrides["pedicel-tip"] = tuple(spec.pedicel_rgb)
+            color_fn = role_aware_color_callable(organ_to_role, role_overrides=overrides)
 
             for view in range(n_views):
                 az = view * 360.0 / n_views

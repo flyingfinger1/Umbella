@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from src.training import build_dataset, list_examples, load_example   # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "data" / "training" / "v6"
+OUT = ROOT / "data" / "training" / "v7"
 
 
 def main() -> None:

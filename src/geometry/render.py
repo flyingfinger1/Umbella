@@ -52,15 +52,19 @@ def default_color_for_label(label: int) -> tuple[int, int, int]:
     return ROLE_TO_RGB["pedicel-tip"]
 
 
-def role_aware_color_callable(organ_to_role: dict[int, str], default=(180, 180, 180)):
+def role_aware_color_callable(
+    organ_to_role: dict[int, str],
+    default=(180, 180, 180),
+    role_overrides: dict[str, tuple[int, int, int]] | None = None,
+):
     """Build a `label_to_color` callable from an {organ_id: role_str} mapping.
 
-    Use with skeleton-based renders: any point's organ id resolves to a role
-    and then to its canonical color, so all bracts look brown, all pedicels
-    look white, etc., even when organ ids are densely numbered.
+    `role_overrides` lets callers redefine specific roles per render — used to
+    e.g. render Pastinaca's pedicels yellow instead of the default white.
     """
+    color_map = {**ROLE_TO_RGB, **(role_overrides or {})}
     def fn(label: int) -> tuple[int, int, int]:
-        return ROLE_TO_RGB.get(organ_to_role.get(int(label), ""), default)
+        return color_map.get(organ_to_role.get(int(label), ""), default)
     return fn
 
 

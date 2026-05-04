@@ -66,7 +66,12 @@ src/
     species.py                    kalibrierte Wertebereiche pro Art
   eval/features.py                27 Skelett-basierte Strukturmerkmale
   training/dataset.py             Trainings-Triplet-Generator (RGB / Labels / Depth)
-  models/classifier.py            kompakter CNN (~843k Params)
+  models/classifier.py            kompakter Synth-CNN (~843k Params)
+  inference/predict.py            Single-Image-Inferenz auf trainierten Modellen
+  leaf/                           Real-Photo-Klassifikator (Ansatz D)
+    fetch_inaturalist.py          iNaturalist-Downloader (DE + research-grade)
+    dataset.py                    Loader + observation-stratified Split
+    model.py                      ResNet-18 Fine-tune
 notebooks/
   01–04                           Pheno4D-Exploration + Skelettierung
   05                              Skelett-Diagnostik
@@ -83,6 +88,10 @@ notebooks/
   18                              Overnight-Orchestrator (cosine LR + 768er-Auflösung)
   19                              Training auf v5 (mit Conium-Stamm-Speckles)
   20                              v6-Build + Training (Augmentation: BG / Shading / Jitter)
+  21                              Single-image inference helper
+  22                              v7-Build + Training (botanical corrections + Pastinaca yellow)
+  23                              Real-photo-classifier training (after iNat data review)
+  24                              Browser review tool for iNaturalist images
 data/                             nicht im Repo (siehe .gitignore)
 ```
 

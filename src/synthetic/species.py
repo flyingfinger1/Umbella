@@ -67,6 +67,10 @@ class SpeciesSpec:
     # fraction of stem surface points relabeled to render as speckles.
     stem_speckle_density: Range = field(default_factory=lambda: Range(0.0, 0.0))
 
+    # per-species pedicel/flower color override. None = inherit ROLE_TO_RGB
+    # default (white-ish). Pastinaca is the one in our set with yellow flowers.
+    pedicel_rgb: tuple[int, int, int] | None = None
+
     sources: list[str] = field(default_factory=list)
 
     def sample(self, seed: int | None = None) -> ApiaceaeParams:
@@ -101,8 +105,8 @@ SPECIES: dict[str, SpeciesSpec] = {
         name="Heracleum sphondylium",
         german_name="Wiesen-Bärenklau",
         stem_height_mm=Range(800, 2000),
-        n_primary_rays=Range(12, 30),
-        primary_ray_length_mm=Range(60, 125),
+        n_primary_rays=Range(10, 25),
+        primary_ray_length_mm=Range(20, 120),
         n_pedicels=Range(15, 30),
         pedicel_length_mm=Range(5, 15),
         primary_ray_half_angle_deg=Range(45, 65),
@@ -119,11 +123,11 @@ SPECIES: dict[str, SpeciesSpec] = {
     "Conium_maculatum": SpeciesSpec(
         name="Conium maculatum",
         german_name="Gefleckter Schierling",
-        stem_height_mm=Range(800, 2500),
+        stem_height_mm=Range(500, 3000),
         n_primary_rays=Range(10, 20),
         primary_ray_length_mm=Range(10, 35),
         n_pedicels=Range(12, 18),
-        pedicel_length_mm=Range(5, 10),
+        pedicel_length_mm=Range(5, 30),
         primary_ray_half_angle_deg=Range(50, 70),
         pedicel_half_angle_deg=Range(60, 80),
         n_laterals=Range(2, 6),
@@ -143,10 +147,10 @@ SPECIES: dict[str, SpeciesSpec] = {
         name="Daucus carota",
         german_name="Wilde Möhre",
         stem_height_mm=Range(300, 1000),
-        n_primary_rays=Range(30, 50),
+        n_primary_rays=Range(20, 90),
         primary_ray_length_mm=Range(30, 70),
-        n_pedicels=Range(10, 20),
-        pedicel_length_mm=Range(2, 12),    # very short at anthesis, longer in fruit
+        n_pedicels=Range(15, 60),
+        pedicel_length_mm=Range(1, 8),    # very short at anthesis, longer in fruit
         primary_ray_half_angle_deg=Range(60, 80),  # quite flat-topped at anthesis
         pedicel_half_angle_deg=Range(70, 88),
         n_laterals=Range(0, 3),
@@ -165,10 +169,10 @@ SPECIES: dict[str, SpeciesSpec] = {
         name="Anthriscus sylvestris",
         german_name="Wiesen-Kerbel",
         stem_height_mm=Range(600, 1700),
-        n_primary_rays=Range(4, 10),
-        primary_ray_length_mm=Range(15, 30),
+        n_primary_rays=Range(5, 15),
+        primary_ray_length_mm=Range(5, 35),
         n_pedicels=Range(6, 12),
-        pedicel_length_mm=Range(5, 10),
+        pedicel_length_mm=Range(3, 8),
         primary_ray_half_angle_deg=Range(40, 60),
         pedicel_half_angle_deg=Range(60, 75),
         n_laterals=Range(2, 6),
@@ -176,15 +180,16 @@ SPECIES: dict[str, SpeciesSpec] = {
         has_involucel=True,                # 5-8 small ovate bracteoles
         reflexed_involucel=False,
         n_involucel_bracts=Range(5, 8),
-        involucel_bract_length_mm=Range(2, 5),
+        involucel_bract_length_mm=Range(3, 10),
         involucel_bract_angle_deg=Range(70, 90),
-        sources=["https://en.wikipedia.org/wiki/Anthriscus_sylvestris"],
+        sources=["https://gobotany.nativeplanttrust.org/species/anthriscus/sylvestris/",
+                 "https://en.wikipedia.org/wiki/Anthriscus_sylvestris"],
     ),
     "Aethusa_cynapium": SpeciesSpec(
         name="Aethusa cynapium",
         german_name="Hundspetersilie",
         stem_height_mm=Range(300, 800),
-        n_primary_rays=Range(10, 20),
+        n_primary_rays=Range(5, 12),
         primary_ray_length_mm=Range(6, 26),
         n_pedicels=Range(15, 25),
         pedicel_length_mm=Range(3, 8),
@@ -202,17 +207,19 @@ SPECIES: dict[str, SpeciesSpec] = {
     "Pastinaca_sativa": SpeciesSpec(
         name="Pastinaca sativa",
         german_name="Pastinak",
-        stem_height_mm=Range(600, 1800),
-        n_primary_rays=Range(15, 25),
-        primary_ray_length_mm=Range(50, 100),
+        stem_height_mm=Range(600, 1200),
+        n_primary_rays=Range(10, 30),
+        primary_ray_length_mm=Range(30, 100),
         n_pedicels=Range(12, 35),
-        pedicel_length_mm=Range(20, 50),
+        pedicel_length_mm=Range(5, 10),
         primary_ray_half_angle_deg=Range(55, 75),
         pedicel_half_angle_deg=Range(60, 80),
         n_laterals=Range(2, 5),
         has_involucre=False,
         has_involucel=False,
         reflexed_involucel=False,
-        sources=["https://en.wikipedia.org/wiki/Parsnip"],
+        pedicel_rgb=(220, 200, 60),    # GELB — diagnostisches Distinktiv
+        sources=["https://gobotany.nativeplanttrust.org/species/pastinaca/sativa/",
+                 "https://en.wikipedia.org/wiki/Parsnip"],
     ),
 }
