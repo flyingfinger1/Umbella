@@ -23,7 +23,7 @@ Aktuell sechs kalibrierte Apiaceae-Arten (Wiesen-Bärenklau, Schierling, Wilde M
 - **Synth-CNN** (~843k Params, v7 mit Pastinaca-Gelb + Botanik-Korrekturen): **97.5 % Test** auf rein synthetischen Bildern. Erster real-foto-Erfolg auf einer Wiesen-Kerbel-Pflanze (Stamm-Detail: 94.7 % Anthriscus).
 - **Leaf-CNN** (ResNet-18 fine-tune auf 1217 kuratierten iNaturalist-DACH-Bildern, mit Class-Weights gegen Imbalance): **76.0 % Test**, alle Klassen ≥60 % Recall. Outdoor-Blattfoto: 80.1 % Anthriscus.
 
-Pipeline ist real-foto-aware, aber noch nicht produktionsreif — verbleibender Bottleneck ist Hintergrund-Distribution-Drift zwischen Synth-Render und realen Outdoor-Bildern.
+Hybrid-Inferenz (Soft 30/70 Synth+Leaf) erreicht **2/9 Top-1-Treffer** auf realen Wiesen-Kerbel-Fotos — besser als jedes Einzelmodell, aber noch nicht produktionsreif.
 
 ## Quickstart
 
@@ -72,7 +72,10 @@ src/
   eval/features.py                27 Skelett-basierte Strukturmerkmale
   training/dataset.py             Trainings-Triplet-Generator (RGB / Labels / Depth)
   models/classifier.py            kompakter Synth-CNN (~843k Params)
-  inference/predict.py            Single-Image-Inferenz auf trainierten Modellen
+  inference/
+    predict.py                    Single-Image-Inferenz Synth-Modell
+    predict_leaf.py               Single-Image-Inferenz Leaf-Modell (ResNet-18)
+    hybrid.py                     Ensemble Synth + Leaf (Soft 30/70 default)
   leaf/                           Real-Photo-Klassifikator (Ansatz D)
     fetch_inaturalist.py          iNaturalist-Downloader (DACH + research-grade)
     dataset.py                    Loader + observation-stratified Split
@@ -98,6 +101,7 @@ notebooks/
   23                              Real-photo-classifier training (after iNat data review)
   24                              Browser review tool for iNaturalist images
   25                              v8-Build + Training (synth + 50% iNat backgrounds)
+  26                              Hybrid-Inferenz Eval (Synth + Leaf Ensemble-Strategien)
 data/                             nicht im Repo (siehe .gitignore)
 ```
 
