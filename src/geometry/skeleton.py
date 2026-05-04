@@ -30,13 +30,48 @@ from scipy.spatial import cKDTree
 @dataclass
 class Skeleton:
     nodes: np.ndarray                       # (N, 3) float32 xyz
-    edges: list[tuple[int, int]]            # undirected, (i, j) with i<j
+    edges: list[tuple[int, int]]            # undirected
     node_organ: list[int]                   # per-node organ id (1=stem, >=2=leaf instance)
-    node_role: list[str] = field(default_factory=list)  # "stem", "leaf-base", "leaf-tip", "leaf-mid"
+    node_role: list[str] = field(default_factory=list)
+    # roles in current pipeline: "stem", "stem-junction", "leaf-base", "leaf-mid", "leaf-tip"
+    metadata: dict = field(default_factory=dict)
 
     @property
     def n_nodes(self) -> int:
         return self.nodes.shape[0]
+
+    def to_dict(self) -> dict:
+        return {
+            "schema": "umbella.skeleton.v1",
+            "metadata": self.metadata,
+            "nodes": self.nodes.round(4).tolist(),
+            "edges": [list(e) for e in self.edges],
+            "node_organ": list(self.node_organ),
+            "node_role": list(self.node_role),
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "Skeleton":
+        return cls(
+            nodes=np.asarray(d["nodes"], dtype=np.float32),
+            edges=[tuple(e) for e in d["edges"]],
+            node_organ=list(d["node_organ"]),
+            node_role=list(d["node_role"]),
+            metadata=dict(d.get("metadata", {})),
+        )
+
+    def save_json(self, path) -> None:
+        import json
+        from pathlib import Path
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(self.to_dict(), f)
+
+    @classmethod
+    def load_json(cls, path) -> "Skeleton":
+        import json
+        with open(path, "r", encoding="utf-8") as f:
+            return cls.from_dict(json.load(f))
 
 
 def _voxel_downsample(points: np.ndarray, voxel: float) -> np.ndarray:
@@ -117,52 +152,83 @@ def extract_polyline(
     n_nodes: int = 10,
     voxel: float | None = None,
     k_neighbors: int = 8,
+    anchor_to: np.ndarray | None = None,
 ) -> np.ndarray:
     """Geodesic mid-axis polyline via shortest path on a kNN graph.
 
-    Robust to curvature (a bent leaf no longer collapses onto a straight PCA
-    axis). Steps:
+    Robust to curvature (a bent organ no longer collapses onto a straight PCA
+    axis).
+
+    Endpoint selection depends on `anchor_to`:
+      - If None: both endpoints are PCA min/max projections of the cloud.
+        Works fine for tube-like organs where the PCA axis aligns with the
+        physical centerline (e.g. a stem segment).
+      - If provided (e.g. the stem point cloud when extracting a leaf):
+        the *base* endpoint is forced to be the cloud point closest to any
+        anchor point. The *tip* endpoint is the geodesically farthest
+        reachable point from the base. This handles broad/flat organs (leaves
+        with thin petioles) where PCA would otherwise miss the petiole and
+        place the base in the leaf's interior.
+        Returned polyline is oriented base -> tip; nodes[0] is guaranteed
+        to be on the cloud point closest to `anchor_to`.
+
+    Steps:
       1. voxel-downsample (auto-pick voxel size from organ bbox if not given)
-      2. find two extremes via PCA min/max projection
-      3. build kNN graph + Dijkstra between the extremes
+      2. choose endpoints (PCA or anchor-based, see above)
+      3. build kNN graph + Dijkstra between the endpoints
       4. resample the path to `n_nodes` equidistant nodes
-      5. light smoothing
+      5. light smoothing (endpoints preserved)
     """
     if points.shape[0] < max(n_nodes, 4):
         return points.astype(np.float32)
 
     bbox_diag = float(np.linalg.norm(points.max(axis=0) - points.min(axis=0)))
     if voxel is None:
-        # ~50 voxels along the longest dim — gives ~2-5k surviving points for typical organs
+        # ~80 voxels along the longest dim — gives ~2-5k surviving points for typical organs
         voxel = max(bbox_diag / 80.0, 1e-3)
 
     ds = _voxel_downsample(points, voxel)
     if ds.shape[0] < max(n_nodes, 4):
-        # voxel too coarse — fall back to original
         ds = points.astype(np.float32)
 
-    a, b = _farthest_extremes(ds)
     g = _knn_graph(ds, k=k_neighbors)
-    dists, predecessors = dijkstra(g, indices=a, return_predecessors=True)
 
-    if not np.isfinite(dists[b]):
-        # graph disconnected (organ split into pieces by downsampling) -> bigger k
-        g = _knn_graph(ds, k=k_neighbors * 3)
+    if anchor_to is not None and anchor_to.shape[0] > 0:
+        # base = downsampled point with smallest distance to any anchor point
+        anchor_tree = cKDTree(anchor_to)
+        d_to_anchor, _ = anchor_tree.query(ds, k=1)
+        a = int(np.argmin(d_to_anchor))
+        # tip = farthest geodesically reachable point from base
+        dists, predecessors = dijkstra(g, indices=a, return_predecessors=True)
+        if not np.isfinite(dists).any() or np.isfinite(dists).sum() < 2:
+            g = _knn_graph(ds, k=k_neighbors * 3)
+            dists, predecessors = dijkstra(g, indices=a, return_predecessors=True)
+        finite_dists = np.where(np.isfinite(dists), dists, -np.inf)
+        b = int(np.argmax(finite_dists))
+        if not np.isfinite(dists[b]) or dists[b] <= 0:
+            return ds[[a]].astype(np.float32)
+    else:
+        a, b = _farthest_extremes(ds)
         dists, predecessors = dijkstra(g, indices=a, return_predecessors=True)
         if not np.isfinite(dists[b]):
-            # give up, use raw extreme line
-            return _resample_polyline(np.stack([ds[a], ds[b]]), n_nodes).astype(np.float32)
+            g = _knn_graph(ds, k=k_neighbors * 3)
+            dists, predecessors = dijkstra(g, indices=a, return_predecessors=True)
+            if not np.isfinite(dists[b]):
+                return _resample_polyline(np.stack([ds[a], ds[b]]), n_nodes).astype(np.float32)
 
     path = [b]
     while path[-1] != a:
-        path.append(int(predecessors[path[-1]]))
+        p = int(predecessors[path[-1]])
+        if p < 0:
+            break
+        path.append(p)
     path.reverse()
     path_xyz = ds[path]
 
     nodes = _resample_polyline(path_xyz, n_nodes)
     nodes = _smooth_polyline(nodes, passes=2)
 
-    if nodes[0, 2] > nodes[-1, 2]:
+    if anchor_to is None and nodes[0, 2] > nodes[-1, 2]:
         nodes = nodes[::-1]
     return nodes.astype(np.float32)
 
@@ -251,6 +317,75 @@ def extract_branched_skeleton(
     return nodes, edges
 
 
+def _attach_point_to_tree(
+    nodes_list: list[np.ndarray],
+    organs: list[int],
+    roles: list[str],
+    edges: list[tuple[int, int]],
+    candidate_node_indices: set[int],
+    point: np.ndarray,
+    junction_organ_id: int = 1,
+    junction_role: str = "stem-junction",
+    eps_mm: float = 0.5,
+) -> tuple[int, bool]:
+    """Find the closest point on any edge among `candidate_node_indices` to `point`.
+    If it lies near an existing endpoint, return that node id (was_new=False).
+    Otherwise, insert a new node at the projected position and split the edge
+    into two; return the new node id (was_new=True).
+
+    Mutates `nodes_list`, `organs`, `roles`, and `edges` in place.
+    """
+    cand = candidate_node_indices
+    best_dist = float("inf")
+    best_edge_idx = -1
+    best_t = 0.0
+    best_a = best_b = -1
+    best_proj: np.ndarray | None = None
+
+    for edge_idx, (a, b) in enumerate(edges):
+        if a not in cand or b not in cand:
+            continue
+        pa = nodes_list[a]
+        pb = nodes_list[b]
+        ab = pb - pa
+        L2 = float(ab @ ab)
+        if L2 < 1e-12:
+            continue
+        t = float((point - pa) @ ab) / L2
+        t = max(0.0, min(1.0, t))
+        proj = pa + t * ab
+        d = float(np.linalg.norm(point - proj))
+        if d < best_dist:
+            best_dist = d
+            best_t = t
+            best_edge_idx = edge_idx
+            best_a, best_b = a, b
+            best_proj = proj
+
+    if best_edge_idx < 0:
+        # no eligible edge (e.g. stem skeleton degenerate) -> nearest candidate node
+        cand_list = sorted(cand)
+        cand_xyz = np.stack([nodes_list[i] for i in cand_list])
+        return cand_list[int(np.argmin(np.linalg.norm(cand_xyz - point, axis=1)))], False
+
+    pa = nodes_list[best_a]
+    pb = nodes_list[best_b]
+    seg_len = float(np.linalg.norm(pb - pa))
+    if best_t * seg_len < eps_mm:
+        return best_a, False
+    if (1.0 - best_t) * seg_len < eps_mm:
+        return best_b, False
+
+    new_idx = len(nodes_list)
+    nodes_list.append(best_proj.astype(np.float32))
+    organs.append(junction_organ_id)
+    roles.append(junction_role)
+    edges.pop(best_edge_idx)
+    edges.append((best_a, new_idx))
+    edges.append((new_idx, best_b))
+    return new_idx, True
+
+
 def extract_plant_skeleton(
     xyz: np.ndarray,
     instance: np.ndarray,
@@ -296,18 +431,20 @@ def extract_plant_skeleton(
     stem_poly_idx_range = (stem_idx_start, stem_idx_end)
 
     # 2. leaves
+    stem_xyz_full = xyz[stem_mask] if stem_mask.any() else None
+    # live set of stem skeleton node indices (grows when we split edges to insert junctions)
+    stem_node_set: set[int] = set(range(stem_idx_start, stem_idx_end))
     for lid in sorted(int(x) for x in np.unique(instance) if x >= 2):
         leaf_mask = instance == lid
         if leaf_mask.sum() < min_organ_points:
             continue
-        leaf_poly = extract_polyline(xyz[leaf_mask], n_nodes=leaf_nodes)
-
-        # decide which end of the polyline is the base: closer to stem
-        if stem_node_xyz is not None:
-            d_first = np.min(np.linalg.norm(stem_node_xyz - leaf_poly[0], axis=1))
-            d_last = np.min(np.linalg.norm(stem_node_xyz - leaf_poly[-1], axis=1))
-            if d_last < d_first:
-                leaf_poly = leaf_poly[::-1]
+        # anchor base to the stem point cloud — handles broad/lobed leaves where
+        # PCA would otherwise place the base inside the leaf blade
+        leaf_poly = extract_polyline(
+            xyz[leaf_mask],
+            n_nodes=leaf_nodes,
+            anchor_to=stem_xyz_full,
+        )
 
         start = len(nodes_list)
         for i, p in enumerate(leaf_poly):
@@ -322,12 +459,16 @@ def extract_plant_skeleton(
         for i in range(start, start + len(leaf_poly) - 1):
             edges.append((i, i + 1))
 
-        # connect base to nearest stem node
-        if stem_node_xyz is not None:
-            base_xyz = leaf_poly[0]
-            nearest_stem_local = int(np.argmin(np.linalg.norm(stem_node_xyz - base_xyz, axis=1)))
-            nearest_stem_global = stem_poly_idx_range[0] + nearest_stem_local
-            edges.append((nearest_stem_global, start))
+        # connect base to the closest point ON the stem skeleton (split edge if needed)
+        if stem_node_set:
+            parent_idx, was_new = _attach_point_to_tree(
+                nodes_list, organs, roles, edges,
+                candidate_node_indices=stem_node_set,
+                point=leaf_poly[0],
+            )
+            if was_new:
+                stem_node_set.add(parent_idx)
+            edges.append((parent_idx, start))
 
     nodes = np.stack(nodes_list, axis=0).astype(np.float32) if nodes_list else np.zeros((0, 3), np.float32)
     return Skeleton(nodes=nodes, edges=edges, node_organ=organs, node_role=roles)

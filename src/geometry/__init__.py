@@ -4,10 +4,20 @@ from .skeleton import (
     extract_branched_skeleton,
     extract_plant_skeleton,
 )
+from .pointcloud import sample_skeleton_pointcloud
+from .visibility import hpr_visible_indices, hpr_multi_view, camera_around
+from .render import render_pointcloud, role_aware_color_callable, ROLE_TO_RGB
 
 __all__ = [
     "Skeleton",
     "extract_polyline",
     "extract_branched_skeleton",
     "extract_plant_skeleton",
+    "sample_skeleton_pointcloud",
+    "hpr_visible_indices",
+    "hpr_multi_view",
+    "camera_around",
+    "render_pointcloud",
+    "role_aware_color_callable",
+    "ROLE_TO_RGB",
 ]
