@@ -25,6 +25,7 @@ from src.geometry import (
     camera_around,
     render_pointcloud,
     role_aware_color_callable,
+    augment_render,
 )
 
 
@@ -39,6 +40,7 @@ def build_dataset(
     elevation_deg: float = 10.0,
     distance_factor: float = 1.5,
     point_radius_px: int = 2,
+    augment: bool = False,
     species_keys: Iterable[str] | None = None,
     progress: bool = True,
 ) -> dict:
@@ -113,6 +115,9 @@ def build_dataset(
                     point_radius_px=point_radius_px,
                     label_to_color=color_fn,
                 )
+                if augment:
+                    aug_seed = seed * 100_000 + view * 17 + 31
+                    rgb = augment_render(rgb, label_map, depth, seed=aug_seed)
                 # store inf as nan so npz can compress + tag bg via label==0
                 depth_to_save = np.where(np.isfinite(depth), depth, 0.0).astype(np.float32)
                 img_path = img_dir / key / f"seed{seed:04d}_view{view}.npz"
@@ -157,6 +162,7 @@ def build_dataset(
             "elevation_deg": elevation_deg,
             "distance_factor": distance_factor,
             "point_radius_px": point_radius_px,
+            "augment": bool(augment),
         },
         "examples": examples,
     }

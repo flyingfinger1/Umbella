@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from src.training import build_dataset, list_examples, load_example   # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "data" / "training" / "v5"
+OUT = ROOT / "data" / "training" / "v6"
 
 
 def main() -> None:
@@ -27,6 +27,7 @@ def main() -> None:
         n_per_species=200,
         n_views=4,
         image_size=(384, 384),
+        augment=True,
     )
     dt = time.time() - t0
     print(f"\nfinished {len(meta['examples'])} examples in {dt:.1f}s")

@@ -18,7 +18,7 @@ SpeciesSpec  →  Skeleton  →  Point cloud  →  HPR (one-sided)  →  RGB / l
                                                           über dieselbe Datenstruktur
 ```
 
-Aktuell sechs kalibrierte Apiaceae-Arten (Wiesen-Bärenklau, Schierling, Wilde Möhre, Wiesen-Kerbel, Hundspetersilie, Pastinak) plus Pheno4D-Anbindung (Mais/Tomate). Ein kompaktes CNN (~843k Params) klassifiziert sie aus synthetisch gerenderten Bildern mit **97.8 % Test-Accuracy** (Stand v5: Conium-Stamm-Speckles im L-System modelliert) — Conium und Aethusa beide bei 100 % Recall, Anthriscus 93 %, andere Klassen ≥96 %.
+Aktuell sechs kalibrierte Apiaceae-Arten (Wiesen-Bärenklau, Schierling, Wilde Möhre, Wiesen-Kerbel, Hundspetersilie, Pastinak) plus Pheno4D-Anbindung (Mais/Tomate). Ein kompaktes CNN (~843k Params) klassifiziert sie aus synthetisch gerenderten Bildern mit **98.2 % Test-Accuracy** (Stand v6: Conium-Stamm-Speckles + natürliche Hintergründe + Lambert-Shading + Color-Jitter) — alle Klassen ≥95.8 % Recall, Conium/Aethusa/Pastinaca bei 100 %.
 
 ## Quickstart
 
@@ -60,6 +60,7 @@ src/
     pointcloud.py                 Zylinder-Surface-Sampling am Skelett
     visibility.py                 Hidden Point Removal (Katz et al. 2007)
     render.py                     perspektivische 2D-Projektion
+    augment.py                    Background / Shading / Color-Jitter
   synthetic/
     apiaceae.py                   L-System-artiger Doppeldolden-Generator
     species.py                    kalibrierte Wertebereiche pro Art
@@ -81,6 +82,7 @@ notebooks/
   17                              CNN trainieren
   18                              Overnight-Orchestrator (cosine LR + 768er-Auflösung)
   19                              Training auf v5 (mit Conium-Stamm-Speckles)
+  20                              v6-Build + Training (Augmentation: BG / Shading / Jitter)
 data/                             nicht im Repo (siehe .gitignore)
 ```
 
