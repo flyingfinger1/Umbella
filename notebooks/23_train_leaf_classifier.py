@@ -75,7 +75,14 @@ def main():
 
     opt = torch.optim.AdamW(model.parameters(), lr=BASE_LR, weight_decay=WEIGHT_DECAY)
     sched = CosineAnnealingLR(opt, T_max=EPOCHS, eta_min=BASE_LR * 0.05)
-    loss_fn = nn.CrossEntropyLoss()
+    # class-weighted loss to compensate for unbalanced class sizes
+    # (DE alone: Daucus 129 vs Anthriscus 58 → strong "default to Daucus" bias)
+    train_counts = np.zeros(6, dtype=np.float32)
+    for _, lbl in train:
+        train_counts[lbl] += 1
+    class_weights = train_counts.sum() / (len(train_counts) * np.maximum(train_counts, 1))
+    print(f"class weights: {dict(zip(SPECIES_ORDER, class_weights.round(2).tolist()))}")
+    loss_fn = nn.CrossEntropyLoss(weight=torch.tensor(class_weights).to(device))
 
     best_val = 0.0
     for epoch in range(1, EPOCHS + 1):

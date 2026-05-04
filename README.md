@@ -18,7 +18,12 @@ SpeciesSpec  →  Skeleton  →  Point cloud  →  HPR (one-sided)  →  RGB / l
                                                           über dieselbe Datenstruktur
 ```
 
-Aktuell sechs kalibrierte Apiaceae-Arten (Wiesen-Bärenklau, Schierling, Wilde Möhre, Wiesen-Kerbel, Hundspetersilie, Pastinak) plus Pheno4D-Anbindung (Mais/Tomate). Ein kompaktes CNN (~843k Params) klassifiziert sie aus synthetisch gerenderten Bildern mit **98.2 % Test-Accuracy** (Stand v6: Conium-Stamm-Speckles + natürliche Hintergründe + Lambert-Shading + Color-Jitter) — alle Klassen ≥95.8 % Recall, Conium/Aethusa/Pastinaca bei 100 %.
+Aktuell sechs kalibrierte Apiaceae-Arten (Wiesen-Bärenklau, Schierling, Wilde Möhre, Wiesen-Kerbel, Hundspetersilie, Pastinak) plus Pheno4D-Anbindung (Mais/Tomate). **Zwei Klassifikatoren in Hybrid-Setup:**
+
+- **Synth-CNN** (~843k Params, v7 mit Pastinaca-Gelb + Botanik-Korrekturen): **97.5 % Test** auf rein synthetischen Bildern. Erster real-foto-Erfolg auf einer Wiesen-Kerbel-Pflanze (Stamm-Detail: 94.7 % Anthriscus).
+- **Leaf-CNN** (ResNet-18 fine-tune auf 1217 kuratierten iNaturalist-DACH-Bildern, mit Class-Weights gegen Imbalance): **76.0 % Test**, alle Klassen ≥60 % Recall. Outdoor-Blattfoto: 80.1 % Anthriscus.
+
+Pipeline ist real-foto-aware, aber noch nicht produktionsreif — verbleibender Bottleneck ist Hintergrund-Distribution-Drift zwischen Synth-Render und realen Outdoor-Bildern.
 
 ## Quickstart
 

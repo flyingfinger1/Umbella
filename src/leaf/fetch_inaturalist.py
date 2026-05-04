@@ -156,11 +156,39 @@ def fetch_species_images(
     return saved
 
 
+PLACE_IDS = {
+    "DE": 7207,
+    "AT": 8057,
+    "CH": 7236,
+}
+
+
 if __name__ == "__main__":
     import sys
     out = Path(__file__).resolve().parents[2] / "data" / "leaf_images"
-    keys = sys.argv[1:] or list(INAT_TAXA.keys())
-    for k in keys:
-        print(f"\n=== {k} ===")
-        n = fetch_species_images(k, out_root=out, max_observations=250, max_photos_per_obs=3)
-        print(f"  total new for {k}: {n}")
+    args = sys.argv[1:]
+    # parse optional --place CC[,CC,...] (default: DE)
+    place_codes = ["DE"]
+    keys = []
+    i = 0
+    while i < len(args):
+        if args[i] == "--place":
+            place_codes = args[i + 1].split(",")
+            i += 2
+        else:
+            keys.append(args[i])
+            i += 1
+    if not keys:
+        keys = list(INAT_TAXA.keys())
+
+    for code in place_codes:
+        if code not in PLACE_IDS:
+            print(f"unknown place code {code}; valid: {list(PLACE_IDS)}")
+            continue
+        pid = PLACE_IDS[code]
+        print(f"\n##### PLACE: {code} (place_id={pid}) #####")
+        for k in keys:
+            print(f"\n=== {k} ===")
+            n = fetch_species_images(k, out_root=out, max_observations=250,
+                                     max_photos_per_obs=3, place_id=pid)
+            print(f"  total new for {k} from {code}: {n}")
