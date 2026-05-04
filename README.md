@@ -18,7 +18,7 @@ SpeciesSpec  →  Skeleton  →  Point cloud  →  HPR (one-sided)  →  RGB / l
                                                           über dieselbe Datenstruktur
 ```
 
-Aktuell sechs kalibrierte Apiaceae-Arten (Wiesen-Bärenklau, Schierling, Wilde Möhre, Wiesen-Kerbel, Hundspetersilie, Pastinak) plus Pheno4D-Anbindung (Mais/Tomate). Ein erstes CNN klassifiziert sie aus synthetisch gerenderten Bildern mit ~89 % Test-Accuracy; verbleibende Confusion liegt fast vollständig auf dem Conium ↔ Anthriscus-Paar (Stand vor Stamm-Speckle-Iteration).
+Aktuell sechs kalibrierte Apiaceae-Arten (Wiesen-Bärenklau, Schierling, Wilde Möhre, Wiesen-Kerbel, Hundspetersilie, Pastinak) plus Pheno4D-Anbindung (Mais/Tomate). Ein kompaktes CNN (~843k Params) klassifiziert sie aus synthetisch gerenderten Bildern mit **97.8 % Test-Accuracy** (Stand v5: Conium-Stamm-Speckles im L-System modelliert) — Conium und Aethusa beide bei 100 % Recall, Anthriscus 93 %, andere Klassen ≥96 %.
 
 ## Quickstart
 
@@ -79,7 +79,8 @@ notebooks/
   14                              2D-Render
   15–16                           Trainings-Datensatz bauen + QA
   17                              CNN trainieren
-  18                              Overnight-Orchestrator
+  18                              Overnight-Orchestrator (cosine LR + 768er-Auflösung)
+  19                              Training auf v5 (mit Conium-Stamm-Speckles)
 data/                             nicht im Repo (siehe .gitignore)
 ```
 
