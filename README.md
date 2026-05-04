@@ -74,7 +74,7 @@ src/
   models/classifier.py            kompakter Synth-CNN (~843k Params)
   inference/predict.py            Single-Image-Inferenz auf trainierten Modellen
   leaf/                           Real-Photo-Klassifikator (Ansatz D)
-    fetch_inaturalist.py          iNaturalist-Downloader (DE + research-grade)
+    fetch_inaturalist.py          iNaturalist-Downloader (DACH + research-grade)
     dataset.py                    Loader + observation-stratified Split
     model.py                      ResNet-18 Fine-tune
 notebooks/
@@ -97,6 +97,7 @@ notebooks/
   22                              v7-Build + Training (botanical corrections + Pastinaca yellow)
   23                              Real-photo-classifier training (after iNat data review)
   24                              Browser review tool for iNaturalist images
+  25                              v8-Build + Training (synth + 50% iNat backgrounds)
 data/                             nicht im Repo (siehe .gitignore)
 ```
 
@@ -111,6 +112,7 @@ data/                             nicht im Repo (siehe .gitignore)
 |---|---|---|---|
 | Pheno4D | 7 Mais + 7 Tomate, Punktwolken über 2–3 Wochen, organ-gelabelt | CC BY | 4.44 GB |
 | ROSE-X | 11 Rosenbüsche, X-ray-CT, Voxel + Punktwolken | CC BY 4.0 | 1.53 GB |
-| synthetisch (`data/training/v3/`) | 200 Instanzen × 6 Apiaceae × 4 Views = 4800 RGB+Label+Depth-Triplets | erzeugt | ~310 MB |
+| synthetisch (`data/training/v7/`) | 200 Instanzen × 6 Apiaceae × 4 Views = 4800 RGB+Label+Depth-Triplets, mit Pastinaca-Gelb + Botanik-Korrekturen | erzeugt | ~80 MB |
+| iNat-Apiaceae (`data/leaf_images/`) | 1217 kuratierte Real-Fotos, DACH/research-grade, 6 Arten | iNaturalist | ~150 MB |
 
 Apiaceae-spezifische 3D-Daten existieren nicht öffentlich — werden synthetisch (L-System gegen Bestimmungsschlüssel kalibriert) und perspektivisch eines Tages durch Eigenaufnahmen erzeugt. Details in [`research.md`](research.md).

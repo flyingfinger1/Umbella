@@ -14,7 +14,10 @@ the label map itself, only their RGB.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
+from PIL import Image, ImageFilter
 
 
 def make_natural_background(shape: tuple[int, int], rng: np.random.Generator) -> np.ndarray:
@@ -54,6 +57,35 @@ def make_natural_background(shape: tuple[int, int], rng: np.random.Generator) ->
             smoothed += pad[k + dy:k + dy + H, k + dx:k + dx + W]
     smoothed /= (2 * k + 1) ** 2
     return np.clip(smoothed, 0, 255).astype(np.uint8)
+
+
+def make_inat_background(shape: tuple[int, int], rng: np.random.Generator,
+                         image_pool: list[Path], blur_radius: int = 12) -> np.ndarray:
+    """Sample a random iNat image, resize+crop to `shape`, heavily blur.
+
+    The blur is essential — without it, the model could learn to classify
+    based on the recognizable plants visible in the background.
+    """
+    H, W = shape
+    path = image_pool[int(rng.integers(0, len(image_pool)))]
+    try:
+        img = Image.open(path).convert("RGB")
+    except Exception:
+        # fall back to procedural BG if file unreadable
+        return make_natural_background(shape, rng)
+
+    iw, ih = img.size
+    scale = max(H / ih, W / iw) * float(rng.uniform(1.0, 1.4))   # zoom in some
+    img = img.resize((max(int(round(iw * scale)), W),
+                      max(int(round(ih * scale)), H)), Image.BILINEAR)
+    iw, ih = img.size
+    left = int(rng.integers(0, max(iw - W + 1, 1)))
+    top = int(rng.integers(0, max(ih - H + 1, 1)))
+    img = img.crop((left, top, left + W, top + H))
+
+    # heavy blur so the BG doesn't compete with foreground detail
+    img = img.filter(ImageFilter.GaussianBlur(radius=blur_radius))
+    return np.asarray(img, dtype=np.uint8)
 
 
 def lambert_shading(depth: np.ndarray, fg_mask: np.ndarray, light_dir: np.ndarray | None = None
@@ -98,8 +130,15 @@ def augment_render(
     label: np.ndarray,
     depth: np.ndarray,
     seed: int | None = None,
+    inat_background_pool: list[Path] | None = None,
+    inat_bg_prob: float = 0.5,
 ) -> np.ndarray:
     """Apply background replacement + shading + color jitter to a render.
+
+    If `inat_background_pool` is provided, with probability `inat_bg_prob`
+    a real (heavily blurred) iNat photo replaces the procedural Sky/Ground
+    gradient. Otherwise procedural is used. Mixed exposure during training
+    teaches the model to ignore background detail entirely.
 
     Returns a new uint8 (H, W, 3) array; original `label` and `depth` are
     untouched (the caller still has the clean ground truth for training).
@@ -108,8 +147,11 @@ def augment_render(
     H, W = label.shape
     fg = label > 0
 
-    # 1. natural background under non-foreground pixels
-    bg = make_natural_background((H, W), rng)
+    # 1. background — procedural OR real-photo with blur
+    if inat_background_pool and rng.random() < inat_bg_prob:
+        bg = make_inat_background((H, W), rng, inat_background_pool)
+    else:
+        bg = make_natural_background((H, W), rng)
     out = np.where(fg[..., None], rgb, bg).astype(np.float32)
 
     # 2. Lambert-style shading on foreground only

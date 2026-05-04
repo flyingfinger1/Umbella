@@ -41,6 +41,8 @@ def build_dataset(
     distance_factor: float = 1.5,
     point_radius_px: int = 2,
     augment: bool = False,
+    inat_bg_dir: Path | str | None = None,
+    inat_bg_prob: float = 0.5,
     species_keys: Iterable[str] | None = None,
     progress: bool = True,
 ) -> dict:
@@ -55,6 +57,14 @@ def build_dataset(
     img_dir.mkdir(parents=True, exist_ok=True)
 
     keys = list(species_keys) if species_keys else list(SPECIES.keys())
+
+    # optional iNat background pool — load once, pass to augment_render
+    inat_pool = None
+    if inat_bg_dir is not None:
+        inat_pool = [p for p in Path(inat_bg_dir).rglob("*.jpg")
+                     if "_trash" not in p.parts]
+        if not inat_pool:
+            inat_pool = None
 
     examples = []
     t_start = time.time()
@@ -120,7 +130,9 @@ def build_dataset(
                 )
                 if augment:
                     aug_seed = seed * 100_000 + view * 17 + 31
-                    rgb = augment_render(rgb, label_map, depth, seed=aug_seed)
+                    rgb = augment_render(rgb, label_map, depth, seed=aug_seed,
+                                         inat_background_pool=inat_pool,
+                                         inat_bg_prob=inat_bg_prob)
                 # store inf as nan so npz can compress + tag bg via label==0
                 depth_to_save = np.where(np.isfinite(depth), depth, 0.0).astype(np.float32)
                 img_path = img_dir / key / f"seed{seed:04d}_view{view}.npz"

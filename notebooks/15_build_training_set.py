@@ -16,7 +16,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from src.training import build_dataset, list_examples, load_example   # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "data" / "training" / "v7"
+OUT = ROOT / "data" / "training" / "v8"
+INAT_BG_DIR = ROOT / "data" / "leaf_images"
 
 
 def main() -> None:
@@ -28,6 +29,8 @@ def main() -> None:
         n_views=4,
         image_size=(384, 384),
         augment=True,
+        inat_bg_dir=INAT_BG_DIR,
+        inat_bg_prob=0.5,
     )
     dt = time.time() - t0
     print(f"\nfinished {len(meta['examples'])} examples in {dt:.1f}s")
