@@ -4,6 +4,10 @@ __pycache__/
 .pytest_cache/
 .ipynb_checkpoints/
 
+.env
+.env.*
+!.env.example
+
 data/
 !data/.gitkeep
 

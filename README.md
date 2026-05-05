@@ -12,7 +12,7 @@ Frühe Phase, aber **Pipeline ist beidseitig geschlossen**:
 SpeciesSpec  →  Skeleton  →  Point cloud  →  HPR (one-sided)  →  RGB / labels / depth
    ↑                                                                    ↓
    └──── kalibrierte Wertebereiche                                  CNN-Klassifikator
-         aus Bestimmungsschlüsseln                              (~89 % Test-Accuracy)
+         aus Bestimmungsschlüsseln                              (Synth-Test: 89–98 %)
                                                                        ↑
                                                           Pheno4D-Skelette einseitbar
                                                           über dieselbe Datenstruktur
@@ -20,10 +20,10 @@ SpeciesSpec  →  Skeleton  →  Point cloud  →  HPR (one-sided)  →  RGB / l
 
 Aktuell sechs kalibrierte Apiaceae-Arten (Wiesen-Bärenklau, Schierling, Wilde Möhre, Wiesen-Kerbel, Hundspetersilie, Pastinak) plus Pheno4D-Anbindung (Mais/Tomate). **Zwei Klassifikatoren in Hybrid-Setup:**
 
-- **Synth-CNN** (~843k Params, v7 mit Pastinaca-Gelb + Botanik-Korrekturen): **97.5 % Test** auf rein synthetischen Bildern. Erster real-foto-Erfolg auf einer Wiesen-Kerbel-Pflanze (Stamm-Detail: 94.7 % Anthriscus).
-- **Leaf-CNN** (ResNet-18 fine-tune auf 1217 kuratierten iNaturalist-DACH-Bildern, mit Class-Weights gegen Imbalance): **76.0 % Test**, alle Klassen ≥60 % Recall. Outdoor-Blattfoto: 80.1 % Anthriscus.
+- **Synth-CNN** (~843k Params, mehrere Varianten v6–v9): aktuell v9 mit *online*-Augmentation (frische BG/Shading/Color-Jitter pro Trainings-Sample, kuratierter 88-Bilder-Hintergrund-Pool aus Pexels + Ideogram + Leonardo, alle subjekt-frei). Synth-Test 89.6 %.
+- **Leaf-CNN** (ResNet-18 fine-tune auf 1217 kuratierten iNaturalist-DACH-Bildern, mit Class-Weights gegen Imbalance): 76.0 % Test, alle Klassen ≥60 % Recall.
 
-Hybrid-Inferenz (Soft 30/70 Synth+Leaf) erreicht **2/9 Top-1-Treffer** auf realen Wiesen-Kerbel-Fotos — besser als jedes Einzelmodell, aber noch nicht produktionsreif.
+**Real-Foto-Stand (n=9 Wiesen-Kerbel-Fotos, statistisch nicht aussagekräftig):** keine Modellvariante schlägt zuverlässig 1–2 Top-1-Treffer auf 9. Frühere Hybrid-Variante (v7+Leaf Soft 30/70) erreichte 2/9 als Existenzbeweis, mit v9 nicht reproduziert. Wichtigster offener Befund über drei Iterationen (v6/v7/v9): **Synth-Test-Accuracy korreliert nicht mit Real-Foto-Performance**. Vor weiteren Architektur-Iterationen wird ein größeres, prä-experimentell kuratiertes Real-Foto-Test-Set (Größenordnung 50+) gebraucht.
 
 ## Quickstart
 
@@ -102,6 +102,8 @@ notebooks/
   24                              Browser review tool for iNaturalist images
   25                              v8-Build + Training (synth + 50% iNat backgrounds)
   26                              Hybrid-Inferenz Eval (Synth + Leaf Ensemble-Strategien)
+  27                              v9-Build (clean RGB) + Training (online aug, curated BG-Pool)
+  28                              v9 vs v7/v8/leaf/hybrid auf Real-Foto-Set
 data/                             nicht im Repo (siehe .gitignore)
 ```
 
@@ -116,7 +118,8 @@ data/                             nicht im Repo (siehe .gitignore)
 |---|---|---|---|
 | Pheno4D | 7 Mais + 7 Tomate, Punktwolken über 2–3 Wochen, organ-gelabelt | CC BY | 4.44 GB |
 | ROSE-X | 11 Rosenbüsche, X-ray-CT, Voxel + Punktwolken | CC BY 4.0 | 1.53 GB |
-| synthetisch (`data/training/v7/`) | 200 Instanzen × 6 Apiaceae × 4 Views = 4800 RGB+Label+Depth-Triplets, mit Pastinaca-Gelb + Botanik-Korrekturen | erzeugt | ~80 MB |
+| synthetisch (`data/training/v9/`) | 200 Instanzen × 6 Apiaceae × 4 Views = 4800 *clean* RGB+Label+Depth-Triplets (Augmentation läuft online im Dataloader) | erzeugt | ~80 MB |
+| Hintergrund-Pool (`data/bg_textures/`) | 88 subjekt-freie Bilder (64 Pexels-Outdoor-Texturen + 13 Indoor- + 11 Outdoor-Szenen aus Ideogram/Leonardo, manuell kuratiert) | gemischt CC0 / KI-erzeugt | ~30 MB |
 | iNat-Apiaceae (`data/leaf_images/`) | 1217 kuratierte Real-Fotos, DACH/research-grade, 6 Arten | iNaturalist | ~150 MB |
 
 Apiaceae-spezifische 3D-Daten existieren nicht öffentlich — werden synthetisch (L-System gegen Bestimmungsschlüssel kalibriert) und perspektivisch eines Tages durch Eigenaufnahmen erzeugt. Details in [`research.md`](research.md).
