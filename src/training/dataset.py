@@ -40,12 +40,19 @@ def build_dataset(
     elevation_deg: float = 10.0,
     distance_factor: float = 1.5,
     point_radius_px: int = 2,
-    augment: bool = False,
-    inat_bg_dir: Path | str | None = None,
-    inat_bg_prob: float = 0.5,
+    augment: bool = False,            # legacy: applies offline augmentation if True
+    inat_bg_dir: Path | str | None = None,    # legacy
+    inat_bg_prob: float = 0.5,                 # legacy
     species_keys: Iterable[str] | None = None,
     progress: bool = True,
 ) -> dict:
+    """Builds a synthetic Apiaceae training dataset.
+
+    NOTE: from v9 onward, `augment=False` (default) — augmentation is moved
+    online into `ApiaceaeImageDataset` for fresh per-load variation. Setting
+    `augment=True` enables the legacy offline path (one-shot augmentation
+    saved to disk). The two modes are mutually exclusive at training time.
+    """
     """Generate a synthetic training dataset and write it to `out_root`.
 
     Returns a metadata dict (also written to <out_root>/metadata.json).

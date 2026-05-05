@@ -68,12 +68,25 @@ SPECIES_ORDER = [
 
 
 class ApiaceaeImageDataset(Dataset):
-    """Loads (rgb_chw_float, species_label_int) pairs from training metadata."""
+    """Loads (rgb_chw_float, species_label_int) pairs from training metadata.
 
-    def __init__(self, root: Path | str, examples: list[dict], augment: bool = False):
+    From v9 onward, supports online augmentation: if `online_aug_pool` is
+    given, the loader applies a fresh `augment_render(...)` call per __getitem__
+    using a different random BG/shading/color-jitter combination each time.
+    This decouples augmentation variability from dataset size — 12 epochs
+    × 4800 examples = 57 600 unique training views instead of 4800.
+
+    For online aug to work, the saved npz must contain rgb (clean), label,
+    and depth — which build_dataset(augment=False) produces.
+    """
+
+    def __init__(self, root: Path | str, examples: list[dict],
+                 augment: bool = False,
+                 online_aug_pool: list[Path] | None = None):
         self.root = Path(root)
         self.examples = examples
         self.augment = augment
+        self.online_aug_pool = online_aug_pool
         self.species_to_idx = {s: i for i, s in enumerate(SPECIES_ORDER)}
 
     def __len__(self) -> int:
@@ -82,11 +95,21 @@ class ApiaceaeImageDataset(Dataset):
     def __getitem__(self, i: int):
         ex = self.examples[i]
         data = np.load(self.root / ex["image"])
-        rgb = data["rgb"].astype(np.float32) / 255.0   # (H, W, 3) in [0, 1]
+        rgb = data["rgb"]                              # uint8 (H, W, 3)
 
+        if self.online_aug_pool is not None:
+            # apply fresh augmentation each load — fresh seed every time
+            from src.geometry import augment_render
+            label = data["label"]
+            depth = data["depth"].astype(np.float32)
+            # restore depth NaN convention (build saves 0 for bg → infer from label)
+            depth = np.where(label > 0, depth, np.inf)
+            rgb = augment_render(rgb, label, depth, seed=None,
+                                  bg_pool=self.online_aug_pool)
+
+        rgb = rgb.astype(np.float32) / 255.0
         if self.augment and np.random.rand() < 0.5:
-            rgb = rgb[:, ::-1].copy()                  # horizontal flip
-        # mean-zero per channel for stability (rough, no full ImageNet stats)
+            rgb = rgb[:, ::-1].copy()
         rgb = rgb - rgb.mean(axis=(0, 1), keepdims=True)
 
         x = torch.from_numpy(rgb).permute(2, 0, 1).contiguous()

@@ -7,7 +7,7 @@ from .skeleton import (
 from .pointcloud import sample_skeleton_pointcloud
 from .visibility import hpr_visible_indices, hpr_multi_view, camera_around
 from .render import render_pointcloud, role_aware_color_callable, ROLE_TO_RGB
-from .augment import augment_render
+from .augment import augment_render, make_texture_background
 
 __all__ = [
     "Skeleton",
@@ -22,4 +22,5 @@ __all__ = [
     "role_aware_color_callable",
     "ROLE_TO_RGB",
     "augment_render",
+    "make_texture_background",
 ]
