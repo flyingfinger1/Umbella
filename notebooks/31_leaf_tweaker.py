@@ -31,8 +31,11 @@ from src.geometry import (                                              # noqa: 
 )
 
 ROOT = Path(__file__).resolve().parents[1]
+# Drop a CC-licensed top-down reference photo here (Wikimedia Commons,
+# iNat CC0/CC-BY, etc.). Falls die Datei nicht existiert, läuft die App
+# trotzdem — der Overlay-Modus fällt auf Synth-only zurück.
 REF_PATH = (ROOT / "data" / "leaf_images" / "Anthriscus_sylvestris"
-            / "plingfactory_anthriscus.jpg")
+            / "_tweaker_reference.jpg")
 STATE_PATH = Path(__file__).parent / "output" / "leaf_tweaker_state.json"
 STATE_PATH.parent.mkdir(exist_ok=True)
 

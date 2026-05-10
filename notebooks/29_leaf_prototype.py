@@ -143,15 +143,17 @@ def main() -> None:
 
     # overlay comparison: synth leaf rotated/scaled onto reference photo
     # so the rachis directions visually align — gives a direct overlap check.
+    # Drop a CC-licensed top-down reference image here (Wikimedia Commons,
+    # iNat CC, etc.) — overlay step is skipped if the file is missing.
     ref_path = (ROOT / "data" / "leaf_images" / "Anthriscus_sylvestris"
-                / "plingfactory_anthriscus.jpg")
+                / "_tweaker_reference.jpg")
     if ref_path.exists():
         try:
             from PIL import Image
             ref_pil = Image.open(ref_path).convert("RGB")
             ref_w, ref_h = ref_pil.size
 
-            # Hand-calibrated alignment to the plingfactory photo.
+            # Hand-calibrated alignment to a top-down leaf photo.
             # The reference shows the leaf with petiole running from lower-left
             # to roughly the centre of the image, then leaf body fanning to
             # the right and upward. Rachis direction ≈ 25° above horizontal.

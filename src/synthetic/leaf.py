@@ -527,11 +527,10 @@ def generate_apiaceae_leaf(
 # The 6-species lineup is ordered roughly from "finely dissected" to "broad
 # simple-pinnate", matching the botanical spectrum within Apiaceae.
 
-# Anthriscus sylvestris — bipinnate. Calibrated visually against
-# plingfactory.de/Science/Atlas reference photo via the interactive
-# tweaker (notebooks/31_leaf_tweaker.py) on 2026-05-10. Synth overlay
-# matches the photo's pinna positions, leaflet shape, and serration
-# pattern within ~1-2 px on a 720×600 px reference.
+# Anthriscus sylvestris — bipinnate. Initial calibration on 2026-05-10
+# via the interactive tweaker (notebooks/31_leaf_tweaker.py); reference
+# photo source has since been retracted (license incompatible with ML
+# use). Re-validation against a CC-licensed top-down photo is pending.
 ANTHRISCUS_LEAF = LeafParams(
     petiole_length_mm=80.0,
     rachis_length_mm=370.0,
