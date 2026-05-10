@@ -31,6 +31,12 @@ DEFAULT_RADIUS_BY_ROLE: dict[str, float] = {
     "leaf-base": 1.0,
     "leaf-mid": 1.0,
     "leaf-tip": 0.6,
+    # synthetic Apiaceae leaf roles
+    "leaf-petiole":      1.6,
+    "leaf-rachis":       1.0,
+    "leaf-pinna-rachis": 0.6,
+    "leaf-midrib":       0.3,
+    "leaf-edge":         0.2,
 }
 
 
@@ -105,6 +111,27 @@ def sample_skeleton_pointcloud(
             label = max(oa, ob)
         all_xyz.append(pts.astype(np.float32))
         all_lbl.append(np.full(n, label, dtype=np.int32))
+
+    # Isolated nodes (those not on any edge) are emitted as bare points at
+    # their own location. This is how the procedural leaf generator passes
+    # surface-fill points for leaflet blades into the cloud — the leaflet
+    # silhouette is described by edges, the interior by a cluster of
+    # isolated nodes with role "leaf-blade".
+    if skel.edges:
+        on_edge = set()
+        for a, b in skel.edges:
+            on_edge.add(int(a))
+            on_edge.add(int(b))
+        isolated = [i for i in range(len(skel.node_role)) if i not in on_edge]
+    else:
+        isolated = list(range(len(skel.node_role)))
+    if isolated:
+        pts = skel.nodes[isolated].astype(np.float32)
+        if noise_mm > 0:
+            pts = pts + rng.normal(0.0, noise_mm, size=pts.shape).astype(np.float32)
+        labels = np.array([skel.node_organ[i] for i in isolated], dtype=np.int32)
+        all_xyz.append(pts)
+        all_lbl.append(labels)
 
     if not all_xyz:
         return np.zeros((0, 3), np.float32), np.zeros((0,), np.int32)
