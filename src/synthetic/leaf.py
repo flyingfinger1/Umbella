@@ -107,6 +107,32 @@ class LeafParams:
     pinna_spacing_power: float = 1.0
     pinnule_spacing_power: float = 1.0
 
+    # how far past the last lateral pair the terminal apex sits, expressed
+    # as a fraction of the remaining rachis. 1.0 = one full inter-pair
+    # step (legacy behavior; visually fine when n_pairs ≥ 5). 0.0 = apex
+    # sits directly on the last pair (no bare rachis after it). Lowering
+    # this is the easiest way to clean up the "extra stem" past the last
+    # pair when n_pinna_pairs is small.
+    pinna_apex_extension_frac: float = 1.0
+    pinnule_apex_extension_frac: float = 1.0
+
+    # For tripinnate leaves (recursion_depth >= 2), the recursive apex of the
+    # OUTERMOST rachis would otherwise produce a mini sub-pinnate cluster
+    # (10+ sub-leaflets fanning out from a tiny apex stem). Botanically most
+    # Apiaceae have a single pointed terminal leaflet at the rachis tip
+    # instead. When True (default), collapse the outermost apex to a single
+    # terminal leaflet polygon. No effect when recursion_depth <= 1 (the
+    # apex was already a single polygon at depth=0).
+    simplify_rachis_apex: bool = True
+
+    # If > 0, overrides terminal_leaflet_scale ONLY for the outermost rachis
+    # apex (= the terminal pinna of the whole leaf). All inner apexes
+    # (per-pinna, per-pinnule) keep using terminal_leaflet_scale. Use this
+    # for species like Conium where the rachis terminates in a full-size
+    # terminal pinna rather than a small terminal leaflet, without blowing
+    # up every lateral pinna's own apex by the same factor.
+    rachis_apex_scale_override: float = 0.0
+
     # at the very tip of every pinnate axis, attach a single terminal leaflet
     # along the axis direction (instead of the axis ending in a naked tip).
     # `terminal_leaflet_scale` scales the terminal's length relative to the
@@ -297,7 +323,9 @@ def generate_apiaceae_leaf(
                            attach_angle_at_tip: float | None = None,
                            petiolule_frac: float = 0.0,
                            terminal_scale: float = 1.0,
-                           spacing_power: float = 1.0) -> None:
+                           spacing_power: float = 1.0,
+                           apex_extension_frac: float = 1.0,
+                           parent_couple: float = 1.0) -> None:
         """Recursively build a pinnate axis with leaflet pairs along it.
 
         depth == 0  →  each leaflet is a terminal (midrib + outline)
@@ -306,35 +334,59 @@ def generate_apiaceae_leaf(
         rachis_organ = next_organ[0]; next_organ[0] += 1
         start_xyz = nodes[start_idx]
 
-        # New semantics: rachis goes FROM the first pinna pair (which sits at
-        # `start_idx`, i.e. right at the petiole-end) TO the terminal apex.
-        # Pair j (j = 0 … n_pairs-1) attaches at fractional position
-        # `t_j = (j / n_pairs)^spacing_power`. The terminal sits at t = 1.
-        # spacing_power < 1 → gaps shrink toward the tip; > 1 → grow toward
-        # the tip; = 1 → uniform.
+        # Rachis layout in t-space (t = fraction of rachis `length`):
+        #   t = 0                : axis start (= start_idx)
+        #   t = t_first          : pair 0 (=  petiolule_frac, continuous bare
+        #                          stalk before the first pair)
+        #   t = t_first + (1-t_first) · ((j/n)^p)
+        #                        : pair j (j = 0 … n-1)
+        #   t = t_last + apex_ext · (1-t_last)
+        #                        : terminal apex
+        # spacing_power < 1 → gaps shrink toward the tip; > 1 → grow.
+        # apex_extension_frac < 1 → reduce bare stalk between last pair and apex.
+        # petiolule_frac > 0 → continuous bare stalk BEFORE the first pair,
+        # remaining pairs scale into [petiolule_frac, t_last] proportionally.
         n_pairs_eff = max(1, n_pairs)
+        t_first = max(0.0, min(0.99, petiolule_frac))
+
+        def _remap(t_raw: float) -> float:
+            return t_first + (1.0 - t_first) * t_raw
+
+        t_last_raw = (((n_pairs_eff - 1) / n_pairs_eff) ** spacing_power
+                      if n_pairs_eff > 0 else 0.0)
+        t_last_pair = _remap(t_last_raw)
+        t_apex = t_last_pair + apex_extension_frac * (1.0 - t_last_pair)
+
+        # Build the rachis chain: start → pair-0 → pair-1 → … → pair-(n-1)
+        # → apex. Always create new nodes for each pair so the spatial
+        # positions reflect petiolule_frac continuously (instead of drop-
+        # thresholding pairs out, which was discrete and felt frozen
+        # between consecutive pair t-values).
         rachis_indices = [start_idx]
-        for j in range(1, n_pairs_eff + 1):
-            t = (j / n_pairs_eff) ** spacing_power
-            xyz = start_xyz + axis_dir * (length * t)
+        for j in range(0, n_pairs_eff + 1):
+            if j < n_pairs_eff:
+                t_pos = _remap((j / n_pairs_eff) ** spacing_power)
+            else:
+                t_pos = t_apex
+            xyz = start_xyz + axis_dir * (length * t_pos)
             idx = add_node(xyz, rachis_organ, organ_role)
             edges.append((rachis_indices[-1], idx))
             rachis_indices.append(idx)
-        # rachis_indices[0]              = first-pair attachment point
-        # rachis_indices[n_pairs_eff]   = terminal apex
+        # rachis_indices: [start_idx, pair_0, pair_1, …, pair_(n-1), apex]
+        # → pair j attaches at rachis_indices[j + 1]
+        # → apex attaches at rachis_indices[n_pairs_eff + 1]
 
         # axis_dir's perpendicular plane — leaflets attach on +e1 / -e1 sides
         e1, _ = _orthonormal_frame(axis_dir)
 
-        # attach a pair of leaflets at each pair-position. Pair j sits at
-        # rachis_indices[j] in the chain we just built; its representative
-        # t-value (used for length / angle interpolation) is the warped
-        # position of that node along the rachis.
+        # attach a pair of leaflets at each pair-position. The RAW t-value
+        # (= position normalized into [0, 1] without the petiolule offset)
+        # is used for length / angle interpolation so that `pinna_length_at_base`
+        # really means "the length of the first lateral pair" regardless of
+        # petiolule_frac, and `at_tip` likewise for the last pair.
         for j in range(0, n_pairs_eff):
             t = (j / n_pairs_eff) ** spacing_power
-            if t < petiolule_frac:
-                continue
-            attach_idx = rachis_indices[j]
+            attach_idx = rachis_indices[j + 1]
             if leaflet_len_peak is None:
                 # legacy linear taper — straight-edged trapezoid envelope
                 leaflet_len = leaflet_len_base + t * (
@@ -356,7 +408,13 @@ def generate_apiaceae_leaf(
                     s = np.sin(0.5 * np.pi * s)
                     leaflet_len = leaflet_len_peak + s * (
                         leaflet_len_tip - leaflet_len_peak)
-            leaflet_len = jitter(leaflet_len)
+            # Keep the un-jittered taper value so that each side can get its
+            # OWN length jitter — real Apiaceae leaves often have slightly
+            # different left vs right pinna lengths (the leaf in Thomé's
+            # Conium plate shows this clearly). Applying jitter once per
+            # pair before the side loop locked the two sides to identical
+            # lengths.
+            leaflet_len_taper = leaflet_len
 
             # angle taper along the rachis: real Apiaceae leaves have steep
             # basal pinnae (~80-85°, almost perpendicular to the rachis) and
@@ -368,6 +426,8 @@ def generate_apiaceae_leaf(
                 angle_here = attach_angle_deg
 
             for side in (+1, -1):
+                # per-side independent jitter (length AND angle)
+                leaflet_len = jitter(leaflet_len_taper)
                 ang = np.radians(jitter_angle(angle_here))
                 leaflet_dir = (np.cos(ang) * axis_dir
                                + np.sin(ang) * (side * e1))
@@ -388,10 +448,17 @@ def generate_apiaceae_leaf(
                     # 0 → constant pinnule size on every pinna.
                     if p.pinnule_scale_with_pinna > 0 and leaflet_len_base > 0:
                         rel = leaflet_len / leaflet_len_base
-                        couple = (1.0 - p.pinnule_scale_with_pinna) \
-                                 + p.pinnule_scale_with_pinna * rel
+                        local_couple = (1.0 - p.pinnule_scale_with_pinna) \
+                                       + p.pinnule_scale_with_pinna * rel
                     else:
-                        couple = 1.0
+                        local_couple = 1.0
+                    # cum_couple propagates all coupling factors from outer
+                    # recursion levels. Without this, the deepest level
+                    # always used `p.pinnule_length_at_base * scale * local_couple`
+                    # — which dropped every ancestor's `local_couple` and
+                    # left e.g. terminal leaflets on a small distal pinna at
+                    # full size, sticking out past their parent pinnule.
+                    cum_couple = parent_couple * local_couple
                     build_pinnate_axis(
                         start_idx=attach_idx,
                         axis_dir=leaflet_dir,
@@ -399,8 +466,8 @@ def generate_apiaceae_leaf(
                         depth=depth - 1,
                         n_pairs=p.n_pinnule_pairs,
                         attach_angle_deg=p.pinnule_angle_deg,
-                        leaflet_len_base=p.pinnule_length_at_base * scale * couple,
-                        leaflet_len_tip=p.pinnule_length_at_tip * scale * couple,
+                        leaflet_len_base=p.pinnule_length_at_base * scale * cum_couple,
+                        leaflet_len_tip=p.pinnule_length_at_tip * scale * cum_couple,
                         # width tracks length so smaller (coupled) leaflets
                         # stay proportional, not chubby:
                         leaflet_len_peak=(
@@ -417,8 +484,10 @@ def generate_apiaceae_leaf(
                                 - p.pinnule_petiolule_frac)),
                         terminal_scale=p.terminal_leaflet_scale,
                         spacing_power=p.pinnule_spacing_power,
+                        apex_extension_frac=p.pinnule_apex_extension_frac,
                         organ_role="leaf-pinna-rachis",
-                        terminal_max_width=terminal_max_width * couple,
+                        terminal_max_width=terminal_max_width * local_couple,
+                        parent_couple=cum_couple,
                     )
                 else:
                     # depth==0: this attachment IS a leaflet polygon. Scale
@@ -440,27 +509,77 @@ def generate_apiaceae_leaf(
         # apex: single terminal leaflet (or sub-axis) along axis_dir,
         # attached at the very end of the rachis chain.
         if terminal_scale > 0:
-            term_len = jitter(leaflet_len_tip) * terminal_scale
-            apex_idx = rachis_indices[n_pairs_eff]
+            # Apex size derives from the LAST LATERAL PAIR's length, not
+            # from leaflet_len_tip directly. The taper from base to tip is
+            # only fully reached at t=1 (the apex position), so reading
+            # leaflet_len_tip would underestimate the size of the structures
+            # the apex sits between. terminal_scale is now a fraction of
+            # the last pair (1.0 = same size, 0.5 = half, etc.). For a
+            # depth=2 inner apex with last pair ~16 mm, this gives a 14 mm
+            # apex stem at terminal_scale=0.85 instead of the previous 3 mm.
+            if n_pairs_eff > 0:
+                t_last = ((n_pairs_eff - 1) / n_pairs_eff) ** spacing_power
+                if leaflet_len_peak is None:
+                    last_pair_len = (leaflet_len_base
+                                     + t_last * (leaflet_len_tip
+                                                 - leaflet_len_base))
+                else:
+                    tp = max(1e-3, min(1 - 1e-3, leaflet_len_peak_t))
+                    if t_last <= tp:
+                        s = np.sin(0.5 * np.pi * (t_last / tp))
+                        last_pair_len = (leaflet_len_base
+                                         + s * (leaflet_len_peak
+                                                - leaflet_len_base))
+                    else:
+                        s = np.sin(0.5 * np.pi
+                                   * ((t_last - tp) / (1.0 - tp)))
+                        last_pair_len = (leaflet_len_peak
+                                         + s * (leaflet_len_tip
+                                                - leaflet_len_peak))
+            else:
+                last_pair_len = leaflet_len_tip
+            term_len = jitter(last_pair_len) * terminal_scale
+            apex_idx = rachis_indices[n_pairs_eff + 1]
+            # At the outermost rachis (depth == recursion_depth), and only
+            # for tripinnate-or-deeper leaves (depth >= 2), cap the apex's
+            # internal recursion at one level — i.e. the apex looks like a
+            # bipinnate apex (mini-pinnate fan of simple polygons) instead
+            # of recursively sub-pinnate (which produced a rectangular
+            # cluster of 100+ polygons on a 4 mm stem).
+            is_outermost = (depth == p.pinna_recursion_depth)
+            collapse_one_level = (is_outermost and p.simplify_rachis_apex
+                                  and depth >= 2)
             if depth > 0:
+                # depth used for the apex recursion. With collapse_one_level
+                # we go straight to depth=0 (simple polygons in the pair
+                # loop) instead of depth-1.
+                apex_depth = 0 if collapse_one_level else (depth - 1)
                 scale = p.recursive_length_factor ** (
                     p.pinna_recursion_depth - depth + 1)
-                # apply pinnule-scale-with-pinna coupling for the apex too
-                if p.pinnule_scale_with_pinna > 0 and leaflet_len_base > 0:
-                    rel = term_len / leaflet_len_base
-                    couple = (1.0 - p.pinnule_scale_with_pinna) \
-                             + p.pinnule_scale_with_pinna * rel
+                # At EVERY apex (outermost rachis OR per-pinna), use pure
+                # proportional scaling for sub-structure size — i.e.
+                # local_couple = term_len / leaflet_len_base, without the
+                # 15 % floor that a partial pinnule_scale_with_pinna
+                # produces for lateral pairs. Otherwise a tiny apex stem
+                # (a few mm) inherits sub-leaflets at 15 % of
+                # pinnule_length_at_base (~10 mm), which stick way out past
+                # the stem and look deformed. For Anthriscus
+                # (pinnule_scale_with_pinna = 1.0) this matches the previous
+                # behavior exactly (the 15 % floor was already 0 %).
+                if leaflet_len_base > 0:
+                    local_couple = term_len / leaflet_len_base
                 else:
-                    couple = 1.0
+                    local_couple = 1.0
+                cum_couple = parent_couple * local_couple
                 build_pinnate_axis(
                     start_idx=apex_idx,
                     axis_dir=axis_dir,
                     length=term_len,
-                    depth=depth - 1,
+                    depth=apex_depth,
                     n_pairs=p.n_pinnule_pairs,
                     attach_angle_deg=p.pinnule_angle_deg,
-                    leaflet_len_base=p.pinnule_length_at_base * scale * couple,
-                    leaflet_len_tip=p.pinnule_length_at_tip * scale * couple,
+                    leaflet_len_base=p.pinnule_length_at_base * scale * cum_couple,
+                    leaflet_len_tip=p.pinnule_length_at_tip * scale * cum_couple,
                     leaflet_len_peak=(
                         p.pinnule_length_peak * scale
                         if p.pinnule_length_peak is not None else None),
@@ -470,8 +589,10 @@ def generate_apiaceae_leaf(
                     petiolule_frac=p.pinnule_petiolule_frac,
                     terminal_scale=p.terminal_leaflet_scale,
                     spacing_power=p.pinnule_spacing_power,
+                    apex_extension_frac=p.pinnule_apex_extension_frac,
                     organ_role="leaf-pinna-rachis",
-                    terminal_max_width=terminal_max_width * couple,
+                    terminal_max_width=terminal_max_width * local_couple,
+                    parent_couple=cum_couple,
                 )
             else:
                 # depth==0 apex: same width-scaling as the depth==0 pair case
@@ -503,8 +624,14 @@ def generate_apiaceae_leaf(
         attach_angle_at_base=p.pinna_angle_at_base,
         attach_angle_at_tip=p.pinna_angle_at_tip,
         petiolule_frac=p.pinna_petiolule_frac,
-        terminal_scale=p.terminal_leaflet_scale,
+        # outermost rachis apex can use a separate override scale so the
+        # whole-leaf terminal pinna can be sized independently of the
+        # smaller per-pinna apexes that all use terminal_leaflet_scale.
+        terminal_scale=(p.rachis_apex_scale_override
+                        if p.rachis_apex_scale_override > 0
+                        else p.terminal_leaflet_scale),
         spacing_power=p.pinna_spacing_power,
+        apex_extension_frac=p.pinna_apex_extension_frac,
         organ_role="leaf-rachis",
         terminal_max_width=p.leaflet_width_mm,
     )
@@ -554,7 +681,9 @@ ANTHRISCUS_LEAF = LeafParams(
     pinnule_petiolule_frac_at_tip=0.02,
     pinna_spacing_power=0.65,               # gaps shrink toward tip
     pinnule_spacing_power=0.9,
-    terminal_leaflet_scale=1.4,
+    # Apex size formula changed 2026-05-11 from leaflet_len_tip to
+    # last_pair_len based. Old 1.4 × tip (91 mm) → new 1.08 × last-pair (84 mm).
+    terminal_leaflet_scale=1.08,
     leaflet_width_mm=19.7,
     leaflet_outline_power=0.7,              # rounded ovate base curve
     leaflet_peak_t=0.2,                     # asymmetric: broad at base, pointed tip
@@ -564,21 +693,42 @@ ANTHRISCUS_LEAF = LeafParams(
     angle_jitter_deg=7.0,
 )
 
-# Conium maculatum — slightly larger and more deeply dissected than Anthriscus
+# Conium maculatum — tripinnate, calibrated 2026-05-11 via tweaker against
+# Thomé Flora plate 385. Architecture: 2 lateral pinna pairs + 1 full-size
+# terminal pinna (= "imparipinnate" reading), see research diary entry.
 CONIUM_LEAF = LeafParams(
     petiole_length_mm=100.0,
-    rachis_length_mm=200.0,
-    n_pinna_pairs=6,
-    pinna_angle_deg=70.0,
-    pinna_length_at_base=90.0,
-    pinna_length_at_tip=15.0,
-    pinna_recursion_depth=2,
+    rachis_length_mm=400.0,
+    n_pinna_pairs=2,
+    pinna_angle_deg=60.0,
+    pinna_angle_at_base=61.0,
+    pinna_angle_at_tip=30.0,
+    pinna_length_at_base=265.0,
+    pinna_length_at_tip=65.0,
+    pinna_spacing_power=0.9,
+    pinna_apex_extension_frac=1.0,
+    pinna_recursion_depth=2,                # tripinnate
     n_pinnule_pairs=6,
-    pinnule_angle_deg=70.0,
-    pinnule_length_at_base=14.0,
-    pinnule_length_at_tip=4.0,
-    recursive_length_factor=1.0,
-    leaflet_width_mm=1.2,
+    pinnule_angle_deg=60.0,
+    pinnule_angle_at_base=62.0,
+    pinnule_angle_at_tip=23.0,
+    pinnule_length_at_base=200.0,
+    pinnule_length_at_tip=55.0,
+    pinnule_petiolule_frac=0.22,
+    pinnule_spacing_power=1.0,
+    pinnule_apex_extension_frac=0.85,
+    recursive_length_factor=0.4,            # tight shrinkage between levels
+    pinnule_scale_with_pinna=0.55,
+    terminal_leaflet_scale=0.85,
+    rachis_apex_scale_override=2.5,         # full-size terminal pinna
+    simplify_rachis_apex=False,             # keep recursive structure on apex
+    leaflet_width_mm=4.5,
+    leaflet_outline_power=1.5,
+    leaflet_peak_t=0.5,
+    leaflet_serration=0.6,
+    leaflet_serration_periods=10,
+    randomness=0.3,
+    angle_jitter_deg=7.0,
     leaflet_blade_fill_points=35,
 )
 
